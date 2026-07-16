@@ -121,20 +121,6 @@ jobs:
             --output text)
           echo "keycloak_client_secret=$(echo "$secret" | jq -r .client_secret)" >> "$GITHUB_OUTPUT"
 
-      - name: Wait for deployment
-        run: |
-          url="${{ needs.ferlease-release.outputs.url }}"
-          for i in $(seq 1 20); do
-            if curl -sf --max-time 10 "$url" > /dev/null 2>&1; then
-              echo "App ready at $url"
-              exit 0
-            fi
-            echo "Waiting for $url... ($i/20)"
-            sleep 30
-          done
-          echo "App not reachable after 10 minutes"
-          exit 1
-
       - name: Install dependencies
         run: npm ci
 
