@@ -28,7 +28,6 @@ jobs:
           branch="${{ github.head_ref }}"
           release="${branch#*/}"
           release=$(echo "$release" | tr '[:upper:]' '[:lower:]')
-          release=$(echo "$release" | sed 's/^[a-z]*-[0-9]*-//')
           echo "value=${release}" >> "$GITHUB_OUTPUT"
           echo "url=https://portail-${release}.dev.qlin.aws.sante.quebec" >> "$GITHUB_OUTPUT"
 
@@ -75,12 +74,11 @@ jobs:
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           URL: ${{ steps.release.outputs.url }}
-          RELEASE: ${{ steps.release.outputs.value }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           curl -sf -X POST "$SLACK_WEBHOOK" \
             -H 'Content-Type: application/json' \
-            -d "{\"text\":\"Ferlease env *${RELEASE}* créé : <${URL}|${URL}> (<${PR_URL}|PR #${{ github.event.pull_request.number }}>)\"}"
+            -d "{\"attachments\":[{\"title\":\"New Radiant Release : Ticket: ${PR_TITLE}\",\"text\":\"You can find the new release for Radiant at ${URL}\",\"color\":\"good\"}]}"
 
   cypress:
     needs: ferlease-release
@@ -98,6 +96,15 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+
+      - name: Notify Slack launch
+        env:
+          SLACK_CYPRESS_WEBHOOK: ${{ secrets.SLACK_CYPRESS_WEBHOOK }}
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          curl -sf -X POST "$SLACK_CYPRESS_WEBHOOK" \
+            -H 'Content-Type: application/json' \
+            -d "{\"attachments\":[{\"title\":\"Ferlease - Cypress Launch Attempt (Radiant) ⚙️\",\"text\":\"Cypress tests are starting ✈️ for branch: ${BRANCH}\",\"color\":\"good\"}]}"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -149,24 +156,24 @@ jobs:
       - name: Upload screenshots to S3
         if: always()
         run: |
-          release="${{ needs.ferlease-release.outputs.release }}"
           aws s3 sync cypress/screenshots/ \
-            "s3://qlin-dev-cypress-artifacts/${release}/screenshots/" \
+            "s3://qlin-dev-cypress-artifacts/${{ needs.ferlease-release.outputs.release }}/screenshots/" \
             --delete
 
-      - name: Notify Slack
+      - name: Notify Slack results
         if: always()
         env:
           SLACK_CYPRESS_WEBHOOK: ${{ secrets.SLACK_CYPRESS_WEBHOOK }}
           RELEASE: ${{ needs.ferlease-release.outputs.release }}
           URL: ${{ needs.ferlease-release.outputs.url }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
           STATUS: ${{ steps.cypress.outcome }}
         run: |
-          icon=$([ "$STATUS" = "success" ] && echo "✅" || echo "❌")
+          fail_count=$(find cypress/screenshots -name "*.png" 2>/dev/null | wc -l | tr -d ' ')
+          emoji=$([ "$fail_count" -eq 0 ] && echo "🚀" || echo "🐞")
+          color=$([ "$fail_count" -eq 0 ] && echo "good" || echo "danger")
           curl -sf -X POST "$SLACK_CYPRESS_WEBHOOK" \
             -H 'Content-Type: application/json' \
-            -d "{\"text\":\"${icon} Cypress *${RELEASE}* : ${STATUS} — <${URL}|env> | <${PR_URL}|PR #${{ github.event.pull_request.number }}>\"}"
+            -d "{\"attachments\":[{\"title\":\"Ferlease - ${RELEASE} - Cypress Test Results: ${fail_count} new fails ${emoji}\",\"color\":\"${color}\"}]}"
 
   ferlease-teardown:
     if: >
@@ -184,7 +191,6 @@ jobs:
           branch="${{ github.head_ref }}"
           release="${branch#*/}"
           release=$(echo "$release" | tr '[:upper:]' '[:lower:]')
-          release=$(echo "$release" | sed 's/^[a-z]*-[0-9]*-//')
           echo "value=${release}" >> "$GITHUB_OUTPUT"
 
       - name: Write SSH credentials
@@ -224,14 +230,3 @@ jobs:
 
       - name: Run ferlease teardown
         run: ./ferlease teardown -c ferlease-config.yml
-
-      - name: Notify Slack
-        if: success()
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-          RELEASE: ${{ steps.release.outputs.value }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
-        run: |
-          curl -sf -X POST "$SLACK_WEBHOOK" \
-            -H 'Content-Type: application/json' \
-            -d "{\"text\":\"Ferlease env *${RELEASE}* supprimé (<${PR_URL}|PR #${{ github.event.pull_request.number }}>)\"}"
