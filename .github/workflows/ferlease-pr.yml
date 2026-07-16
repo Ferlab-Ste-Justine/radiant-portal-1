@@ -89,7 +89,9 @@ jobs:
       contains(github.event.pull_request.labels.*.name, 'cypress') &&
       (startsWith(github.head_ref, 'feat/') || startsWith(github.head_ref, 'fix/') ||
        startsWith(github.head_ref, 'refactor/') || startsWith(github.head_ref, 'perf/'))
-    runs-on: [self-hosted, qlin-arc]
+    runs-on: ubuntu-latest
+    container:
+      image: ferlabcrsj/cypress-included-custom
     permissions:
       id-token: write
       contents: read
