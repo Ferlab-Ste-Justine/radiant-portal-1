@@ -97,6 +97,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Install curl
+        run: apt-get install -y --no-install-recommends curl
+
       - name: Notify Slack launch
         env:
           SLACK_CYPRESS_WEBHOOK: ${{ secrets.SLACK_CYPRESS_WEBHOOK }}
