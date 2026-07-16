@@ -156,6 +156,7 @@ jobs:
       - name: Upload screenshots to S3
         if: always()
         run: |
+          mkdir -p cypress/screenshots
           aws s3 sync cypress/screenshots/ \
             "s3://qlin-dev-cypress-artifacts/${{ needs.ferlease-release.outputs.release }}/screenshots/" \
             --delete
