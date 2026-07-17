@@ -121,13 +121,13 @@ jobs:
             "s3://qlin-dev-cypress-artifacts/$RELEASE/source.tar.gz"
 
       - name: Run Cypress via ECS Fargate
-        id: cypress
         env:
           RELEASE: ${{ needs.ferlease-release.outputs.release }}
           CYPRESS_BASE_URL: ${{ needs.ferlease-release.outputs.url }}/
           CYPRESS_USER_USERNAME: ${{ secrets.CYPRESS_USER_USERNAME }}
           CYPRESS_USER_PASSWORD: ${{ secrets.CYPRESS_USER_PASSWORD }}
           KEYCLOAK_CLIENT_SECRET: ${{ secrets.CYPRESS_KEYCLOAK_CLIENT_SECRET }}
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
         run: |
           SG_ID=$(aws ec2 describe-security-groups \
             --filters Name=group-name,Values=ferlease-cypress-task \
@@ -140,47 +140,23 @@ jobs:
             --arg username "$CYPRESS_USER_USERNAME" \
             --arg password "$CYPRESS_USER_PASSWORD" \
             --arg kc_secret "$KEYCLOAK_CLIENT_SECRET" \
+            --arg slack_webhook "$SLACK_WEBHOOK" \
             '{containerOverrides:[{name:"ferlease-cypress",environment:[
               {name:"RELEASE",value:$release},
               {name:"CYPRESS_BASE_URL",value:$base_url},
               {name:"CYPRESS_USER_USERNAME",value:$username},
               {name:"CYPRESS_USER_PASSWORD",value:$password},
-              {name:"KEYCLOAK_CLIENT_SECRET",value:$kc_secret}
+              {name:"KEYCLOAK_CLIENT_SECRET",value:$kc_secret},
+              {name:"SLACK_WEBHOOK",value:$slack_webhook}
             ]}]}')
 
-          TASK_ARN=$(aws ecs run-task \
+          aws ecs run-task \
             --cluster pipelines \
             --task-definition ferlease-cypress \
             --launch-type FARGATE \
             --network-configuration "awsvpcConfiguration={subnets=[subnet-07cac0f9ab50d76ed,subnet-0be9fa70291f7c86c],assignPublicIp=DISABLED,securityGroups=[$SG_ID]}" \
             --overrides "$OVERRIDES" \
-            --query 'tasks[0].taskArn' \
-            --output text)
-
-          until [ "$(aws ecs describe-tasks --cluster pipelines --tasks "$TASK_ARN" --query 'tasks[0].lastStatus' --output text)" = "STOPPED" ]; do
-            sleep 15
-          done
-
-          EXIT_CODE=$(aws ecs describe-tasks \
-            --cluster pipelines \
-            --tasks "$TASK_ARN" \
-            --query 'tasks[0].containers[0].exitCode' \
-            --output text)
-
-          exit "$EXIT_CODE"
-
-      - name: Notify Slack results
-        if: always()
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-          RELEASE: ${{ needs.ferlease-release.outputs.release }}
-        run: |
-          fail_count=$(aws s3 ls "s3://qlin-dev-cypress-artifacts/$RELEASE/screenshots/" 2>/dev/null | grep "\.png$" | wc -l | tr -d ' ')
-          emoji=$([ "$fail_count" -eq 0 ] && echo "🚀" || echo "🐞")
-          color=$([ "$fail_count" -eq 0 ] && echo "good" || echo "danger")
-          curl -sf -X POST "$SLACK_WEBHOOK" \
-            -H 'Content-Type: application/json' \
-            -d "{\"attachments\":[{\"title\":\"Ferlease - ${RELEASE} - Cypress Test Results: ${fail_count} new fails ${emoji}\",\"color\":\"${color}\"}]}"
+            --output text
 
   ferlease-teardown:
     if: >
