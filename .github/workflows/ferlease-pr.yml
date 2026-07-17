@@ -97,10 +97,10 @@ jobs:
 
       - name: Notify Slack launch
         env:
-          SLACK_CYPRESS_WEBHOOK: ${{ secrets.SLACK_CYPRESS_WEBHOOK }}
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           BRANCH: ${{ github.head_ref }}
         run: |
-          curl -sf -X POST "$SLACK_CYPRESS_WEBHOOK" \
+          curl -sf -X POST "$SLACK_WEBHOOK" \
             -H 'Content-Type: application/json' \
             -d "{\"attachments\":[{\"title\":\"Ferlease - Cypress Launch Attempt (Radiant) ⚙️\",\"text\":\"Cypress tests are starting ✈️ for branch: ${BRANCH}\",\"color\":\"good\"}]}"
 
@@ -172,13 +172,13 @@ jobs:
       - name: Notify Slack results
         if: always()
         env:
-          SLACK_CYPRESS_WEBHOOK: ${{ secrets.SLACK_CYPRESS_WEBHOOK }}
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           RELEASE: ${{ needs.ferlease-release.outputs.release }}
         run: |
           fail_count=$(aws s3 ls "s3://qlin-dev-cypress-artifacts/$RELEASE/screenshots/" 2>/dev/null | grep "\.png$" | wc -l | tr -d ' ')
           emoji=$([ "$fail_count" -eq 0 ] && echo "🚀" || echo "🐞")
           color=$([ "$fail_count" -eq 0 ] && echo "good" || echo "danger")
-          curl -sf -X POST "$SLACK_CYPRESS_WEBHOOK" \
+          curl -sf -X POST "$SLACK_WEBHOOK" \
             -H 'Content-Type: application/json' \
             -d "{\"attachments\":[{\"title\":\"Ferlease - ${RELEASE} - Cypress Test Results: ${fail_count} new fails ${emoji}\",\"color\":\"${color}\"}]}"
 
